@@ -18,15 +18,8 @@ from models import (
     db,
     User,
     Entries,
-    Electricity,
-    Voltage,
-    Motion,
-    Temperature,
-    Light,
-    Tank,
 )
 
-# from models import Person
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
@@ -52,11 +45,8 @@ def sitemap():
     return generate_sitemap(app)
 
 
-# GET ALL USERS, GET A SINGLE USER, MODIFY OR DELETE A SINGLE USER
-
-
-@app.route("/user", methods=["GET"])
-@app.route("/user/<int:user_id>", methods=["GET", "PUT", "DELETE"])
+@app.route("/user", methods=["GET"]) # Manda todos los usuarios registrados
+@app.route("/user/<int:user_id>", methods=["GET", "PUT", "DELETE"]) # Manda un solo usuario, modifica datos del usuario o borra un usuario
 @jwt_required()
 def handle_users(user_id=None):
     if request.method == "GET":
@@ -109,10 +99,7 @@ def handle_users(user_id=None):
     return "You should not be seeing this message /user"
 
 
-# CREATE NEW USER
-
-
-@app.route("/signup", methods=["POST"])
+@app.route("/signup", methods=["POST"]) # Registra al usuario en la bd, recibe nombre, email y contraseña
 def handle_signup():
     body = request.json
 
@@ -130,10 +117,7 @@ def handle_signup():
             return jsonify(error.args), 500
 
 
-# USER LOGIN AND TOKEN CREATION
-
-
-@app.route("/login", methods=["POST"])
+@app.route("/login", methods=["POST"]) # Recibe email y contraseña, verifica en la bd y manda un token de vuelta
 def handle_login():
     body = request.json
 
@@ -153,11 +137,8 @@ def handle_login():
     return "You should not be seeing this message /login"
 
 
-# GET ALL USER ENTRIES, GET ALL USER ENTRIES FOR A SPECIFIC DEVICE
-
-
-@app.route("/entries", methods=["GET"])
-@app.route("/entries/<string:device_name>", methods=["GET"])
+@app.route("/entries", methods=["GET"]) # Manda todas las entradas de un usuario específico
+@app.route("/entries/<string:device_name>", methods=["GET"]) # Manda las entradas de un solo dispositivo del usuario
 @jwt_required()
 def handle_entries(device_name=None):
     current_user_id = get_jwt_identity()
@@ -173,6 +154,21 @@ def handle_entries(device_name=None):
             ).all()
             device_entries = list(map(lambda ntr: ntr.serialize(), device_entries))
             return jsonify({"results": device_entries})
+
+
+@app.route("/create", methods=["POST"]) # Crea una nueva entrada en la base de datos a modo de prueba
+@jwt_required()
+def handle_create():
+    current_user_id = get_jwt_identity()
+
+    instance = Entries.new_entry(
+        user_id=current_user_id, device="tank", data="50"
+    )
+    if instance is not None:
+        instance = instance.serialize()
+        return jsonify({"instance": instance})
+    else:
+        return jsonify({"msg": f"Could not create entry. Instance is {instance}"})
 
 
 # this only runs if `$ python src/main.py` is executed
