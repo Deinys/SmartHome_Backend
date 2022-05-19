@@ -16,6 +16,7 @@ from flask_jwt_extended import (
 )
 from models import (
     db,
+    Controller,
     User,
     Entries,
 )
@@ -45,8 +46,10 @@ def sitemap():
     return generate_sitemap(app)
 
 
-@app.route("/user", methods=["GET"]) # Manda todos los usuarios registrados
-@app.route("/user/<int:user_id>", methods=["GET", "PUT", "DELETE"]) # Manda un solo usuario, modifica datos del usuario o borra un usuario
+@app.route("/user", methods=["GET"])  # Manda todos los usuarios registrados
+@app.route(
+    "/user/<int:user_id>", methods=["GET", "PUT", "DELETE"]
+)  # Manda un solo usuario, modifica datos del usuario o borra un usuario
 @jwt_required()
 def handle_users(user_id=None):
     if request.method == "GET":
@@ -99,25 +102,48 @@ def handle_users(user_id=None):
     return "You should not be seeing this message /user"
 
 
-@app.route("/signup", methods=["POST"]) # Registra al usuario en la bd, recibe nombre, email y contraseña
+@app.route(
+    "/signup", methods=["POST"]
+)  # Registra al usuario en la bd, recibe nombre, email y contraseña
 def handle_signup():
     body = request.json
 
-    if not body.get("name") or not body.get("email") or not body.get("password"):
-        return jsonify({"msg": "Not found."}), 404
+    if (
+        not body.get("name")
+        or not body.get("email")
+        or not body.get("password")
+        or not body.get("controller_sn")
+    ):
+        return jsonify({"msg": "Received an incomplete request."}), 404
     else:
-        user = User(name=body["name"], email=body["email"], password=body["password"])
-        db.session.add(user)
+        user_response = User.new_user(
+            name=body["name"],
+            email=body["email"],
+            password=body["password"],
+            controller_sn=body["controller_sn"],
+        )
 
-        try:
-            db.session.commit()
-            return jsonify(user.serialize()), 201
-        except Exception as error:
-            db.session.rollback()
-            return jsonify(error.args), 500
+        if isinstance(user_response, str):
+            return jsonify({"msg": user_response}), 404
+
+        user_created = User.query.filter_by(email=body["email"]).first()
+
+        assignment_response = Controller.assign_user(
+            controller_sn=body["controller_sn"], user_id=user_created.id
+        )
+
+        if isinstance(assignment_response, str):
+            return jsonify({"msg": assignment_response}), 404
+
+        user = user_response.serialize()
+        controller = assignment_response.serialize()
+
+        return jsonify({"user": user, "controller": controller}), 201
 
 
-@app.route("/login", methods=["POST"]) # Recibe email y contraseña, verifica en la bd y manda un token de vuelta
+@app.route(
+    "/login", methods=["POST"]
+)  # Recibe email y contraseña, verifica en la bd y manda un token de vuelta
 def handle_login():
     body = request.json
 
@@ -137,8 +163,12 @@ def handle_login():
     return "You should not be seeing this message /login"
 
 
-@app.route("/entries", methods=["GET"]) # Manda todas las entradas de un usuario específico
-@app.route("/entries/<string:device_name>", methods=["GET"]) # Manda las entradas de un solo dispositivo del usuario
+@app.route(
+    "/entries", methods=["GET"]
+)  # Manda todas las entradas de un usuario específico
+@app.route(
+    "/entries/<string:device_name>", methods=["GET"]
+)  # Manda las entradas de un solo dispositivo del usuario
 @jwt_required()
 def handle_entries(device_name=None):
     current_user_id = get_jwt_identity()
@@ -147,28 +177,38 @@ def handle_entries(device_name=None):
         if device_name is None:
             all_entries = Entries.query.filter_by(user_id=current_user_id).all()
             all_entries = list(map(lambda ntr: ntr.serialize(), all_entries))
-            return jsonify({"results": all_entries})
+
+            return jsonify({"results": all_entries}), 200
         else:
             device_entries = Entries.query.filter_by(
-                user_id=current_user_id, device=device_name
+                user_id=current_user_id, device_type=device_name
             ).all()
             device_entries = list(map(lambda ntr: ntr.serialize(), device_entries))
-            return jsonify({"results": device_entries})
+
+            return jsonify({"results": device_entries}), 200
 
 
-@app.route("/create", methods=["POST"]) # Crea una nueva entrada en la base de datos a modo de prueba
+@app.route(
+    "/create", methods=["POST"]
+)  # Crea una nueva entrada en la base de datos a modo de prueba
 @jwt_required()
 def handle_create():
+    body = request.json
     current_user_id = get_jwt_identity()
 
-    instance = Entries.new_entry(
-        user_id=current_user_id, device="tank", data="50"
+    entry_response = Entries.new_entry(
+        user_id=current_user_id,
+        device_type=body["device_type"],
+        device_data=body["device_data"],
     )
-    if instance is not None:
-        instance = instance.serialize()
-        return jsonify({"instance": instance})
+
+    if entry_response is not None:
+        entry = entry_response.serialize()
+        return jsonify({"entry": entry}), 201
     else:
-        return jsonify({"msg": f"Could not create entry. Instance is {instance}"})
+        return (
+            jsonify({"msg": entry_response}), 404
+        )
 
 
 # this only runs if `$ python src/main.py` is executed
