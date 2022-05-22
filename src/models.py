@@ -3,27 +3,30 @@ from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
 
-class Base(db.Model):
-    __abstract__ = True
-    date_created = db.Column(
-        db.DateTime(timezone=True), default=db.func.now(), nullable=False
-    )
-
-
-class Controller(Base):
+class Controller(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    controller_sn = db.Column(db.Integer, unique=True, nullable=False)
+    controller_sn = db.Column(db.String(20), unique=True, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
 
-    def assign_user(controller_sn, user_id):
-        controller_to_update = Controller.query.filter_by(
-            controller_sn=controller_sn
-        ).first()
+    @classmethod
+    def new_controller(cls, **kwargs):
+        instance = cls(**kwargs)
 
-        controller_to_update.user_id = user_id
+        if isinstance(instance, cls):
+            try:
+                db.session.add(instance)
+                db.session.commit()
+                return instance
+            except Exception as error:
+                db.session.rollback()
+                print(error.args)
+        return "Could not create controller."
+
+    def assign_user(controller, user_id):
         try:
+            controller.user_id = user_id
             db.session.commit()
-            return controller_to_update
+            return controller
         except Exception as error:
             db.session.rollback()
             print(error.args)
@@ -37,11 +40,19 @@ class Controller(Base):
         }
 
 
+class Base(db.Model):
+    __abstract__ = True
+    date_created = db.Column(
+        db.DateTime(timezone=True), default=db.func.now(), nullable=False
+    )
+
+
 class User(Base):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(250), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(80), unique=False, nullable=False)
+    token = db.Column(db.String(500), unique=True)
     controller_sn = db.relationship("Controller", backref="owner", uselist=False)
     entries = db.relationship("Entries", backref="author", uselist=True)
 
@@ -49,33 +60,28 @@ class User(Base):
         return "<User %r>" % self.id
 
     @classmethod
-    def new_user(cls, name, email, password, controller_sn):
-        instance = cls(name=name, email=email, password=password)
+    def new_user(cls, **kwargs):
+        instance = cls(**kwargs)
 
         if isinstance(instance, cls):
-            user_exists = User.query.filter_by(email=instance.email).one_or_none()
-
-            if user_exists is not None:
-                return "User email already registered."
-
-            user_controller = Controller.query.filter_by(
-                controller_sn=controller_sn
-            ).one_or_none()
-
-            if user_controller is not None:
-                if user_controller.user_id:
-                    return "Controller id already assigned to a user."
-
+            try:
                 db.session.add(instance)
-                try:
-                    db.session.commit()
-                    return instance
-                except Exception as error:
-                    db.session.rollback()
-                    print(error.args)
-            else:
-                return "Controller id not recognized."
+                db.session.commit()
+                return instance
+            except Exception as error:
+                db.session.rollback()
+                print(error.args)
         return "Could not create user."
+
+    def save_token(user, token):
+        try:
+            user.token = token
+            db.session.commit()
+            return user
+        except Exception as error:
+            db.session.rollback()
+            print(error.args)
+        return "Could not save token."
 
     def serialize(self):
         return {
@@ -94,41 +100,17 @@ class Entries(Base):
 
     @classmethod
     def new_entry(cls, **kwargs):
-        devices = ["tank", "motion", "temperature", "light"]
         instance = cls(**kwargs)
 
         if isinstance(instance, cls):
-            if instance.device_type not in devices:
-                return "Device type not recognized."
-
-            last_entry = (
-                Entries.query.filter_by(
-                    user_id=instance.user_id, device_type=instance.device_type
-                )
-                .order_by(Entries.date_created.desc())
-                .first()
-            )
-
-            if last_entry is not None:
-                if instance.device_data == last_entry.device_data:
-                    return last_entry
-                else:
-                    db.session.add(instance)
-                    try:
-                        db.session.commit()
-                        return instance
-                    except Exception as error:
-                        db.session.rollback()
-                        print(error.args)
-            else:
+            try:
                 db.session.add(instance)
-                try:
-                    db.session.commit()
-                    return instance
-                except Exception as error:
-                    db.session.rollback()
-                    print(error.args)
-        return "Could not create instance."
+                db.session.commit()
+                return instance
+            except Exception as error:
+                db.session.rollback()
+                print(error.args)
+        return "Could not create entry."
 
     def serialize(self):
         return {
