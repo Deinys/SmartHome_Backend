@@ -47,6 +47,11 @@ class Base(db.Model):
     )
 
 
+
+#2 LIGHTS
+
+
+
 class User(Base):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(250), nullable=False)
@@ -82,6 +87,16 @@ class User(Base):
             db.session.rollback()
             print(error.args)
         return "Could not save token."
+
+    def update_email(user):
+        try:
+            user.email = email
+            db.session.commit()
+            return jsonify(user.serialize()), 201
+        except Exception as error:
+            db.session.rollback()
+            print(error.args)
+        return "Could not update email."
 
     def serialize(self):
         return {

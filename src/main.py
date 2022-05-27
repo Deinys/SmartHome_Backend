@@ -46,6 +46,7 @@ def handle_invalid_usage(error):
 def sitemap():
     return generate_sitemap(app)
 
+
 # ARREGLAR y solucionar borrar usuario
 # Manda todos los usuarios registrados
 # Manda un solo usuario, modifica datos del usuario o borra un usuario
@@ -53,54 +54,27 @@ def sitemap():
 @app.route("/user/<int:user_id>", methods=["GET", "PUT", "DELETE"])
 @jwt_required()
 def handle_users(user_id=None):
-    if request.method == "GET":
-        if user_id is None:
-            all_users = User.query.all()
-            all_users = list(map(lambda usr: usr.serialize(), all_users))
-            return jsonify({"results": all_users}), 200
-        else:
-            user_to_send = User.query.filter_by(id=user_id).one_or_none()
+    body = request.json
 
-            if user_to_send is not None:
-                return jsonify(user_to_send.serialize()), 200
-            else:
-                return jsonify({"msg": "Not found."}), 404
+    email = body.get("email", None)
+    current_user_id = get_jwt_identity()
 
-    if request.method == "PUT":
-        body = request.json
-        email = body.get("email", None)
+    if email is None:
+        return jsonify({"msg": "Received an incomplete request."})
 
-        if email is not None:
-            user_to_update = User.query.filter_by(id=user_id).first()
+    user_to_update = User.query.filter_by(id=current_user_id).one_or_none()
 
-            if user_to_update is not None:
-                user_to_update.email = email
+    if user_to_update is not None:
+        return jsonify({"msg": "User not found."}), 404
 
-                try:
-                    db.session.commit()
-                    return jsonify(user_to_update.serialize()), 201
-                except Exception as error:
-                    db.session.rollback()
-                    return jsonify(error.args)
-        else:
-            return jsonify({"msg": "Not found."}), 404
+    user_response = User.update_email(user_to_update)
 
-    if request.method == "DELETE":
-        user_to_delete = User.query.filter_by(id=user_id).first()
+    if isinstance(user_response, str):
+        return jsonify({"msg": user_response}), 404
+    else:
+        new_user = user_response.serialize()
 
-        if user_to_delete is not None:
-            db.session.delete(user_to_delete)
-
-            try:
-                db.session.commit()
-                return jsonify([]), 204
-            except Exception as error:
-                db.session.rollback()
-                return jsonify(error.args)
-        else:
-            return jsonify({"msg": "Not found."}), 404
-
-    return jsonify({"msg": "You should not be seeing this message /user"}), 404
+    return jsonify({"response": new_user}), 204
 
 
 # Crea 3 controladores con sus SN
@@ -242,7 +216,7 @@ def handle_create():
     device_type = body["device_type"]
     device_data = body["device_data"]
 
-    devices = ["tank", "motion", "temperature", "light"]
+    devices = ["sonar", "motion", "thermostat", "light"]
     if device_type not in devices:
         return jsonify({"msg": "Device type not recognized."}), 404
 
@@ -263,7 +237,7 @@ def handle_create():
     )
 
     if isinstance(entry_response, str):
-        return (jsonify({"msg": entry_response})), 404
+        return jsonify({"msg": entry_response}), 404
     else:
         entry = entry_response.serialize()
 
