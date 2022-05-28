@@ -218,7 +218,7 @@ def handle_create():
 
     devices = ["sonar", "motion", "thermostat", "light"]
     if device_type not in devices:
-        return jsonify({"msg": "Device type not recognized."}), 404
+        return jsonify({"response": "Device type not recognized."}), 404
 
     last_entry = (
         Entries.query.filter_by(user_id=current_user_id, device_type=device_type)
@@ -237,7 +237,7 @@ def handle_create():
     )
 
     if isinstance(entry_response, str):
-        return jsonify({"msg": entry_response}), 404
+        return jsonify({"response": entry_response}), 404
     else:
         entry = entry_response.serialize()
 
